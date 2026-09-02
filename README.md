@@ -19,6 +19,7 @@ The final address normally follows:
 2. Tap **Start AR camera** and allow camera access.
 3. Print `ar-target-print-a4.pdf`, or display the PNG on a second device.
 4. Point the camera at the complete black marker.
+5. Keep the marker visible while moving the phone around the cat, then tap the shutter button to save a photo.
 
 Keep all filenames unchanged. The camera experience loads `ar-target.patt` using a relative path so it works from a GitHub project repository.
 The optimised `lucky-lantern-cat-mobile.glb` model must remain beside `ar.html`.

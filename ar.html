@@ -25,12 +25,7 @@
       .ar-ui {
         position: fixed; z-index: 10; inset: 0; display: flex; flex-direction: column;
         justify-content: space-between; pointer-events: none;
-        padding: max(4.4rem, calc(env(safe-area-inset-top) + 3.4rem)) 1rem max(1rem, env(safe-area-inset-bottom));
-      }
-      .brand-logo {
-        position: absolute; top: max(.8rem, env(safe-area-inset-top)); left: 50%;
-        width: min(42vw, 10.5rem); height: auto; transform: translateX(-50%);
-        filter: drop-shadow(0 3px 8px rgba(0,0,0,.72));
+        padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
       }
       .top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
       .back {
@@ -100,7 +95,6 @@
           const badge = document.querySelector("#tracking-badge");
           const model = document.querySelector("#cat-model-entity");
           const capture = document.querySelector("#capture-button");
-          const logo = document.querySelector("#brand-logo");
           let modelReady = false;
           let markerVisible = false;
 
@@ -141,18 +135,6 @@
 
             context.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
             context.drawImage(arCanvas, 0, 0, arCanvas.width, arCanvas.height, 0, 0, width, height);
-            if (logo.complete && logo.naturalWidth) {
-              const logoRect = logo.getBoundingClientRect();
-              const scaleX = width / rect.width;
-              const scaleY = height / rect.height;
-              context.drawImage(
-                logo,
-                (logoRect.left - rect.left) * scaleX,
-                (logoRect.top - rect.top) * scaleY,
-                logoRect.width * scaleX,
-                logoRect.height * scaleY
-              );
-            }
 
             const blob = await new Promise((resolve) => output.toBlob(resolve, "image/jpeg", .92));
             if (!blob) {
@@ -188,7 +170,7 @@
             updateCapture();
             if (markerVisible) {
               badge.textContent = "Target locked";
-              status.innerHTML = "<strong>Lucky Cat found</strong><span>Move the paper and watch the cat follow.</span>";
+              status.innerHTML = "<strong>Lucky Cat found</strong><span>Move around it while keeping the marker visible.</span>";
             }
           });
           model.addEventListener("model-error", () => {
@@ -202,7 +184,7 @@
             guide.classList.add("found");
             badge.textContent = modelReady ? "Target locked" : "Loading 3D cat";
             status.innerHTML = modelReady
-              ? "<strong>Lucky Cat found</strong><span>Move the paper and watch the cat follow.</span>"
+              ? "<strong>Lucky Cat found</strong><span>Move around it while keeping the marker visible.</span>"
               : "<strong>Target found</strong><span>The Lucky Cat is still loading…</span>";
           });
           this.el.addEventListener("markerLost", () => {
@@ -218,7 +200,6 @@
   </head>
   <body>
     <div class="ar-ui" aria-live="polite">
-      <img class="brand-logo" id="brand-logo" src="./rewards-logo.png?v=6" alt="&amp;Rewards" />
       <div class="top">
         <a class="back" href="./index.html" aria-label="Close AR camera">×</a>
         <div class="badge" id="tracking-badge">Looking for target</div>
@@ -242,7 +223,7 @@
       arjs="sourceType: webcam; detectionMode: mono; patternRatio: 0.5; debugUIEnabled: false; trackingMethod: best;"
     >
       <a-assets timeout="30000">
-        <a-asset-item id="cat-model" src="./lucky-lantern-cat-mobile.glb?v=6"></a-asset-item>
+        <a-asset-item id="cat-model" src="./lucky-lantern-cat-mobile.glb?v=7"></a-asset-item>
       </a-assets>
       <a-marker
         type="pattern"
@@ -260,7 +241,6 @@
           position="0 0.018 0"
           scale="3.6 3.6 3.6"
           rotation="0 180 0"
-          animation="property: rotation; from: 0 168 0; to: 0 192 0; dir: alternate; dur: 2600; easing: easeInOutSine; loop: true"
         ></a-gltf-model>
         <a-ring
           position="0 0.015 0"
