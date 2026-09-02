@@ -71,6 +71,23 @@
       .capture:active::after { transform: scale(.86); background: #ff5a1f; }
       .capture:disabled { opacity: .55; }
       .capture[hidden] { display: none; }
+      .photo-preview {
+        position: fixed; z-index: 30; inset: 0; display: flex; flex-direction: column;
+        gap: 1rem; padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+        background: #090909; pointer-events: auto;
+      }
+      .photo-preview[hidden] { display: none; }
+      .photo-preview img {
+        width: 100%; min-height: 0; flex: 1; object-fit: contain; border-radius: .9rem;
+        background: #000;
+      }
+      .preview-actions { display: grid; grid-template-columns: 1fr 1.35fr; gap: .75rem; }
+      .preview-button {
+        min-height: 3.25rem; border: 1px solid rgba(255,255,255,.4); border-radius: .8rem;
+        color: #fff; background: #202020; font: inherit; font-weight: 800;
+      }
+      .preview-button.primary { border-color: #ff5a1f; background: #ff5a1f; }
+      .preview-note { margin: -.35rem 0 0; color: rgba(255,255,255,.68); font-size: .78rem; text-align: center; }
       .corner {
         position: absolute; width: 2.4rem; height: 2.4rem;
         border-color: #ff5a1f; border-style: solid;
@@ -95,17 +112,52 @@
           const badge = document.querySelector("#tracking-badge");
           const model = document.querySelector("#cat-model-entity");
           const capture = document.querySelector("#capture-button");
+          const preview = document.querySelector("#photo-preview");
+          const previewImage = document.querySelector("#photo-preview-image");
+          const previewNote = document.querySelector("#preview-note");
+          const retake = document.querySelector("#retake-button");
+          const savePhoto = document.querySelector("#save-photo-button");
+          const scene = document.querySelector("a-scene");
+          const marker = this.el;
           let modelReady = false;
           let markerVisible = false;
+          let capturedBlob = null;
+          let capturedUrl = null;
 
           const updateCapture = () => {
             capture.hidden = !(modelReady && markerVisible);
           };
 
+          const closePreview = () => {
+            preview.hidden = true;
+            previewImage.removeAttribute("src");
+            capturedBlob = null;
+            if (capturedUrl) URL.revokeObjectURL(capturedUrl);
+            capturedUrl = null;
+          };
+
+          retake.addEventListener("click", closePreview);
+
+          savePhoto.addEventListener("click", async () => {
+            if (!capturedBlob) return;
+            const file = new File([capturedBlob], "lucky-cat-ar-photo.jpg", { type: "image/jpeg" });
+            try {
+              if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: "Lucky Cat AR photo" });
+              } else {
+                previewNote.textContent = "Press and hold the photo, then choose Save to Photos.";
+              }
+            } catch (error) {
+              if (error.name !== "AbortError") {
+                previewNote.textContent = "Press and hold the photo, then choose Save to Photos.";
+              }
+            }
+          });
+
           capture.addEventListener("click", async () => {
             const video = document.querySelector("#arjs-video") || document.querySelector("video");
             const arCanvas = document.querySelector("canvas.a-canvas");
-            if (!video || !arCanvas || video.readyState < 2) return;
+            if (!video || !arCanvas || !scene.renderer || !scene.camera || video.readyState < 2) return;
 
             capture.disabled = true;
             const rect = arCanvas.getBoundingClientRect();
@@ -116,6 +168,10 @@
             output.width = width;
             output.height = height;
             const context = output.getContext("2d");
+            if (!context) {
+              capture.disabled = false;
+              return;
+            }
 
             const sourceWidth = video.videoWidth;
             const sourceHeight = video.videoHeight;
@@ -134,7 +190,24 @@
             }
 
             context.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
-            context.drawImage(arCanvas, 0, 0, arCanvas.width, arCanvas.height, 0, 0, width, height);
+            const wasVisible = marker.object3D.visible;
+            marker.object3D.visible = true;
+            try {
+              scene.setAttribute("screenshot", { width, height });
+              const screenshot = scene.components.screenshot;
+              if (screenshot && screenshot.getCanvas) {
+                const arLayer = screenshot.getCanvas("perspective");
+                context.drawImage(arLayer, 0, 0, arLayer.width, arLayer.height, 0, 0, width, height);
+              } else {
+                scene.renderer.render(scene.object3D, scene.camera);
+                context.drawImage(arCanvas, 0, 0, arCanvas.width, arCanvas.height, 0, 0, width, height);
+              }
+            } catch (error) {
+              scene.renderer.render(scene.object3D, scene.camera);
+              context.drawImage(arCanvas, 0, 0, arCanvas.width, arCanvas.height, 0, 0, width, height);
+            } finally {
+              marker.object3D.visible = wasVisible;
+            }
 
             const blob = await new Promise((resolve) => output.toBlob(resolve, "image/jpeg", .92));
             if (!blob) {
@@ -142,27 +215,13 @@
               return;
             }
 
-            const file = new File([blob], "lucky-cat-ar-photo.jpg", { type: "image/jpeg" });
-            try {
-              if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-                await navigator.share({ files: [file], title: "Lucky Cat AR photo" });
-              } else {
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement("a");
-                link.href = url;
-                link.download = file.name;
-                document.body.appendChild(link);
-                link.click();
-                link.remove();
-                setTimeout(() => URL.revokeObjectURL(url), 1000);
-              }
-            } catch (error) {
-              if (error.name !== "AbortError") {
-                status.innerHTML = "<strong>Photo could not be saved</strong><span>Please try the shutter button again.</span>";
-              }
-            } finally {
-              capture.disabled = false;
-            }
+            if (capturedUrl) URL.revokeObjectURL(capturedUrl);
+            capturedBlob = blob;
+            capturedUrl = URL.createObjectURL(blob);
+            previewImage.src = capturedUrl;
+            previewNote.textContent = "On iPhone, choose Save Image from the share menu.";
+            preview.hidden = false;
+            capture.disabled = false;
           });
 
           model.addEventListener("model-loaded", () => {
@@ -216,6 +275,15 @@
       <i class="corner c4" aria-hidden="true"></i>
     </div>
 
+    <div class="photo-preview" id="photo-preview" aria-label="Captured AR photo" hidden>
+      <img id="photo-preview-image" alt="Captured camera view with the Lucky Cat" />
+      <div class="preview-actions">
+        <button class="preview-button" id="retake-button" type="button">Retake</button>
+        <button class="preview-button primary" id="save-photo-button" type="button">Save to Photos</button>
+      </div>
+      <p class="preview-note" id="preview-note">On iPhone, choose Save Image from the share menu.</p>
+    </div>
+
     <a-scene
       embedded
       vr-mode-ui="enabled: false"
@@ -223,7 +291,7 @@
       arjs="sourceType: webcam; detectionMode: mono; patternRatio: 0.5; debugUIEnabled: false; trackingMethod: best;"
     >
       <a-assets timeout="30000">
-        <a-asset-item id="cat-model" src="./lucky-lantern-cat-mobile.glb?v=8"></a-asset-item>
+        <a-asset-item id="cat-model" src="./lucky-lantern-cat-mobile.glb?v=9"></a-asset-item>
       </a-assets>
       <a-marker
         type="pattern"
