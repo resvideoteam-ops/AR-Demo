@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+    <meta name="theme-color" content="#111111" />
+    <title>AR Camera — Marker Demo</title>
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body {
+        width: 100%; height: 100%; margin: 0; overflow: hidden;
+        background: transparent; font-family: Arial, Helvetica, sans-serif;
+      }
+      #arjs-video, body > video {
+        z-index: 0 !important;
+        background: transparent !important;
+      }
+      a-scene, canvas.a-canvas {
+        z-index: 1 !important;
+        background: transparent !important;
+      }
+      .ar-ui {
+        position: fixed; z-index: 10; inset: 0; display: flex; flex-direction: column;
+        justify-content: space-between; pointer-events: none;
+        padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+      }
+      .top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+      .back {
+        pointer-events: auto; display: inline-grid; width: 3rem; height: 3rem;
+        place-items: center; border: 1px solid rgba(255,255,255,.42);
+        border-radius: 999px; color: #fff; background: rgba(10,10,10,.62);
+        backdrop-filter: blur(14px); text-decoration: none; font-size: 1.55rem;
+      }
+      .badge {
+        display: inline-flex; align-items: center; gap: .55rem; padding: .8rem 1rem;
+        border: 1px solid rgba(255,255,255,.33); border-radius: 999px; color: #fff;
+        background: rgba(10,10,10,.62); backdrop-filter: blur(14px);
+        font-size: .82rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+      }
+      .badge::before {
+        width: .55rem; height: .55rem; border-radius: 50%; background: #ff5a1f;
+        box-shadow: 0 0 0 5px rgba(255,90,31,.18); content: "";
+      }
+      .guide {
+        align-self: center; width: min(78vw, 430px); aspect-ratio: 1;
+        border: 2px solid rgba(255,255,255,.34); border-radius: 1rem;
+        transition: opacity .2s ease, transform .2s ease;
+      }
+      .guide.found { opacity: 0; transform: scale(.94); }
+      .bottom {
+        align-self: center; width: min(92vw, 480px); padding: 1rem 1.2rem;
+        border: 1px solid rgba(255,255,255,.3); border-radius: 1rem; color: #fff;
+        background: rgba(10,10,10,.7); backdrop-filter: blur(16px); text-align: center;
+      }
+      .bottom strong { display: block; margin-bottom: .35rem; font-size: 1rem; }
+      .bottom span { color: rgba(255,255,255,.72); font-size: .86rem; line-height: 1.4; }
+      .corner {
+        position: absolute; width: 2.4rem; height: 2.4rem;
+        border-color: #ff5a1f; border-style: solid;
+      }
+      .c1 { top: 22%; left: 11%; border-width: 4px 0 0 4px; }
+      .c2 { top: 22%; right: 11%; border-width: 4px 4px 0 0; }
+      .c3 { bottom: 22%; left: 11%; border-width: 0 0 4px 4px; }
+      .c4 { right: 11%; bottom: 22%; border-width: 0 4px 4px 0; }
+      .found ~ .corner { opacity: 0; }
+      @media (orientation: landscape) and (max-height: 540px) {
+        .guide { width: min(46vh, 320px); }
+        .bottom { width: auto; max-width: 55vw; }
+        .c1, .c2 { top: 14%; }
+        .c3, .c4 { bottom: 14%; }
+      }
+    </style>
+    <script>
+      AFRAME.registerComponent("marker-status", {
+        init: function () {
+          const status = document.querySelector("#status-copy");
+          const guide = document.querySelector("#guide");
+          const badge = document.querySelector("#tracking-badge");
+          this.el.addEventListener("markerFound", () => {
+            guide.classList.add("found");
+            badge.textContent = "Target locked";
+            status.innerHTML = "<strong>Target found</strong><span>Move the paper and watch the object follow.</span>";
+          });
+          this.el.addEventListener("markerLost", () => {
+            guide.classList.remove("found");
+            badge.textContent = "Looking for target";
+            status.innerHTML = "<strong>Point at the printed target</strong><span>Keep the full black square inside the frame.</span>";
+          });
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <div class="ar-ui" aria-live="polite">
+      <div class="top">
+        <a class="back" href="./index.html" aria-label="Close AR camera">×</a>
+        <div class="badge" id="tracking-badge">Looking for target</div>
+      </div>
+      <div class="guide" id="guide" aria-hidden="true"></div>
+      <div class="bottom" id="status-copy">
+        <strong>Point at the printed target</strong>
+        <span>Keep the full black square inside the frame.</span>
+      </div>
+      <i class="corner c1" aria-hidden="true"></i>
+      <i class="corner c2" aria-hidden="true"></i>
+      <i class="corner c3" aria-hidden="true"></i>
+      <i class="corner c4" aria-hidden="true"></i>
+    </div>
+
+    <a-scene
+      embedded
+      vr-mode-ui="enabled: false"
+      renderer="antialias: true; alpha: true; colorManagement: true; logarithmicDepthBuffer: true"
+      arjs="sourceType: webcam; detectionMode: mono; patternRatio: 0.5; debugUIEnabled: false; trackingMethod: best;"
+    >
+      <a-marker
+        type="pattern"
+        url="./ar-target.patt"
+        marker-status
+        emitevents="true"
+        smooth="true"
+        smooth-count="7"
+        smooth-tolerance="0.01"
+        smooth-threshold="3"
+      >
+        <a-entity
+          position="0 0.48 0"
+          scale="0.72 0.72 0.72"
+          animation="property: object3D.position.y; from: 0.40; to: 0.56; dir: alternate; dur: 1250; easing: easeInOutSine; loop: true"
+        >
+          <a-entity animation="property: rotation; to: 0 360 0; dur: 7000; easing: linear; loop: true">
+            <a-torus-knot
+              color="#ff5a1f"
+              radius="0.34"
+              radius-tubular="0.095"
+              p="2"
+              q="3"
+              segments-radial="96"
+              segments-tubular="18"
+              material="metalness: 0.32; roughness: 0.28"
+            ></a-torus-knot>
+            <a-sphere radius="0.18" color="#ffffff" material="metalness: 0.1; roughness: 0.18"></a-sphere>
+            <a-sphere radius="0.065" position="0.55 0.08 0" color="#ffcc29"></a-sphere>
+            <a-sphere radius="0.05" position="-0.45 0.33 0.18" color="#ff5a1f"></a-sphere>
+            <a-sphere radius="0.055" position="-0.18 -0.42 -0.34" color="#ffffff"></a-sphere>
+          </a-entity>
+        </a-entity>
+        <a-ring
+          position="0 0.015 0"
+          rotation="-90 0 0"
+          radius-inner="0.54"
+          radius-outer="0.58"
+          color="#ff5a1f"
+          material="opacity: 0.9; transparent: true"
+          animation="property: rotation; to: -90 0 360; dur: 9000; easing: linear; loop: true"
+        ></a-ring>
+        <a-circle
+          position="0 0.006 0"
+          rotation="-90 0 0"
+          radius="0.48"
+          color="#000000"
+          material="opacity: 0.18; transparent: true"
+        ></a-circle>
+        <a-light type="ambient" color="#ffffff" intensity="1.3"></a-light>
+        <a-light type="directional" color="#ffffff" intensity="1.7" position="1 2 1"></a-light>
+      </a-marker>
+      <a-entity camera></a-entity>
+    </a-scene>
+  </body>
+</html>

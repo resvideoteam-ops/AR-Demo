@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1600" viewBox="0 0 1600 1600">
+  <title>AR tracking marker</title>
+  <rect width="1600" height="1600" fill="#000000"/>
+  <g transform="translate(400 400)">
+    <rect width="800" height="800" fill="#ffffff"/>
+    <circle cx="470" cy="365" r="230" fill="#ff5a1f"/>
+    <path d="M87 92h245v116H203v197H87z" fill="#111111"/>
+    <path d="M610 80h112v204H610z" fill="#111111"/>
+    <path d="M515 510l225 188H430z" fill="#111111"/>
+    <rect x="88" y="565" width="245" height="106" fill="#111111"/>
+    <circle cx="210" cy="505" r="60" fill="#ff5a1f"/>
+    <circle cx="475" cy="360" r="66" fill="#ffffff"/>
+    <circle cx="475" cy="360" r="31" fill="#111111"/>
+  </g>
+</svg>
