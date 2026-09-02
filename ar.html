@@ -223,7 +223,7 @@
       arjs="sourceType: webcam; detectionMode: mono; patternRatio: 0.5; debugUIEnabled: false; trackingMethod: best;"
     >
       <a-assets timeout="30000">
-        <a-asset-item id="cat-model" src="./lucky-lantern-cat-mobile.glb?v=7"></a-asset-item>
+        <a-asset-item id="cat-model" src="./lucky-lantern-cat-mobile.glb?v=8"></a-asset-item>
       </a-assets>
       <a-marker
         type="pattern"
@@ -240,7 +240,7 @@
           src="#cat-model"
           position="0 0.018 0"
           scale="3.6 3.6 3.6"
-          rotation="0 180 0"
+          rotation="0 0 0"
         ></a-gltf-model>
         <a-ring
           position="0 0.015 0"
@@ -258,8 +258,8 @@
           color="#000000"
           material="opacity: 0.18; transparent: true"
         ></a-circle>
-        <a-light type="ambient" color="#ffffff" intensity="1.6"></a-light>
-        <a-light type="directional" color="#fff1dc" intensity="2.1" position="1 2 1"></a-light>
+        <a-light type="ambient" color="#ffffff" intensity="0.72"></a-light>
+        <a-light type="directional" color="#fff1dc" intensity="0.95" position="1 2 1"></a-light>
       </a-marker>
       <a-entity camera></a-entity>
     </a-scene>
