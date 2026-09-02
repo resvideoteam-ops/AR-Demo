@@ -21,3 +21,4 @@ The final address normally follows:
 4. Point the camera at the complete black marker.
 
 Keep all filenames unchanged. The camera experience loads `ar-target.patt` using a relative path so it works from a GitHub project repository.
+The optimised `lucky-lantern-cat-mobile.glb` model must remain beside `ar.html`.
