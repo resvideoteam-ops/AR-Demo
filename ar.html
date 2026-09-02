@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
     <meta name="theme-color" content="#111111" />
     <title>AR Camera — Marker Demo</title>
-    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
+    <script src="./vendor-aframe-1.6.0.js"></script>
+    <script src="./vendor-aframe-ar-3.4.7.js"></script>
     <style>
       :root { color-scheme: dark; }
       * { box-sizing: border-box; }
@@ -133,12 +133,52 @@
           let markerVisible = false;
           let capturedBlob = null;
           let capturedUrl = null;
+          const HOLD_MS = 2000;
+          const component = this;
           let userYaw = 0;
           let activePointer = null;
           let dragStartX = 0;
           let dragStartYaw = 0;
           this.holdUntil = 0;
           this.lossTimer = null;
+
+          // AR.js clears the marker's visibility inside its own tick, and tock runs
+          // after the frame is already drawn. Forcing visibility here — immediately
+          // before the renderer walks the graph — is the only order-independent
+          // place where the "hold last pose" grace period actually survives.
+          const markerObject = marker.object3D;
+          const previousBeforeRender = scene.object3D.onBeforeRender;
+          scene.object3D.onBeforeRender = function () {
+            if (component.holdUntil && performance.now() < component.holdUntil) {
+              markerObject.visible = true;
+            }
+            if (previousBeforeRender) previousBeforeRender.apply(this, arguments);
+          };
+          this.restoreBeforeRender = () => {
+            scene.object3D.onBeforeRender = previousBeforeRender;
+          };
+
+          // A fixed luminance threshold is what makes detection lighting-dependent:
+          // the same printout reads fine at a desk and drops out near a window.
+          // Otsu picks the threshold per frame instead.
+          let thresholdApplied = false;
+          const enableAutoThreshold = () => {
+            if (thresholdApplied) return;
+            try {
+              const system = scene.systems && scene.systems.arjs;
+              const context = system && (system._arToolkitContext || system.arToolkitContext);
+              const controller = context && context.arController;
+              if (!controller || typeof controller.setThresholdMode !== "function") return;
+              controller.setThresholdMode(2); // AR_LABELING_THRESH_MODE_AUTO_OTSU
+              thresholdApplied = true;
+            } catch (error) {
+              /* keep ARToolkit's fixed threshold */
+            }
+          };
+          scene.addEventListener("arjs-video-loaded", () => {
+            setTimeout(enableAutoThreshold, 400);
+            setTimeout(enableAutoThreshold, 1500);
+          });
 
           const updateCapture = () => {
             capture.hidden = !(modelReady && markerVisible);
@@ -309,29 +349,34 @@
               ? "<strong>Lucky Cat found</strong><span>Drag left or right to rotate it, or move around it for the 3D view.</span>"
               : "<strong>Target found</strong><span>The Lucky Cat is still loading…</span>";
           });
+          const endHold = () => {
+            // Re-arm rather than bail out: returning here used to leave holdUntil set
+            // with no pending timer, pinning a stale cat on screen indefinitely.
+            const remaining = this.holdUntil - performance.now();
+            if (remaining > 0) {
+              this.lossTimer = setTimeout(endHold, remaining + 50);
+              return;
+            }
+            this.lossTimer = null;
+            this.holdUntil = 0;
+            markerVisible = false;
+            updateCapture();
+            guide.classList.remove("found");
+            badge.textContent = "Looking for target";
+            status.innerHTML = "<strong>Point at the printed target</strong><span>Keep the full black square inside the frame.</span>";
+          };
+
           this.el.addEventListener("markerLost", () => {
-            this.holdUntil = performance.now() + 1500;
+            this.holdUntil = performance.now() + HOLD_MS;
             badge.textContent = "Hold steady";
             status.innerHTML = "<strong>Tracking the last position</strong><span>Bring the complete marker back into view.</span>";
             if (this.lossTimer) clearTimeout(this.lossTimer);
-            this.lossTimer = setTimeout(() => {
-              if (performance.now() < this.holdUntil) return;
-              this.holdUntil = 0;
-              markerVisible = false;
-              updateCapture();
-              guide.classList.remove("found");
-              badge.textContent = "Looking for target";
-              status.innerHTML = "<strong>Point at the printed target</strong><span>Keep the full black square inside the frame.</span>";
-            }, 1500);
+            this.lossTimer = setTimeout(endHold, HOLD_MS + 50);
           });
-        },
-        tock: function () {
-          if (this.holdUntil && performance.now() < this.holdUntil) {
-            this.el.object3D.visible = true;
-          }
         },
         remove: function () {
           if (this.lossTimer) clearTimeout(this.lossTimer);
+          if (this.restoreBeforeRender) this.restoreBeforeRender();
         }
       });
     </script>
@@ -367,8 +412,8 @@
     <a-scene
       embedded
       vr-mode-ui="enabled: false"
-      renderer="antialias: true; alpha: true; colorManagement: true; logarithmicDepthBuffer: true; preserveDrawingBuffer: true"
-      arjs="sourceType: webcam; detectionMode: mono; patternRatio: 0.5; debugUIEnabled: false; trackingMethod: best;"
+      renderer="antialias: true; alpha: true; colorManagement: true; logarithmicDepthBuffer: true"
+      arjs="sourceType: webcam; sourceWidth: 1280; sourceHeight: 960; displayWidth: 1280; displayHeight: 960; detectionMode: mono; patternRatio: 0.5; maxDetectionRate: 30; debugUIEnabled: false; trackingMethod: best;"
     >
       <a-assets timeout="30000">
         <a-asset-item id="cat-model" src="./lucky-lantern-cat-mobile.glb?v=11"></a-asset-item>
@@ -379,9 +424,9 @@
         marker-status
         emitevents="true"
         smooth="true"
-        smooth-count="7"
+        smooth-count="5"
         smooth-tolerance="0.01"
-        smooth-threshold="3"
+        smooth-threshold="2"
       >
         <a-gltf-model
           id="cat-model-entity"
