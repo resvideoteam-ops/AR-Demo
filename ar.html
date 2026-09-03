@@ -193,8 +193,14 @@
             resetView.hidden = !(modelReady && markerVisible);
           };
 
+          // The model is authored facing +Z, but the viewer stands on the opposite
+          // side of the marker, so it needs half a turn to face them. Drag-rotate
+          // and the Front button both write the whole rotation, so the offset has
+          // to live here rather than only on the element.
+          const BASE_YAW = 180;
           const normalizeYaw = (degrees) => ((degrees + 180) % 360 + 360) % 360 - 180;
-          const applyYaw = () => model.setAttribute("rotation", { x: 0, y: userYaw, z: 0 });
+          const applyYaw = () =>
+            model.setAttribute("rotation", { x: 0, y: normalizeYaw(BASE_YAW + userYaw), z: 0 });
 
           const bindRotationControls = () => {
             const canvas = scene.canvas || document.querySelector("canvas.a-canvas");
@@ -270,10 +276,22 @@
             if (!video || !arCanvas || !scene.renderer || !scene.camera || video.readyState < 2) return;
 
             capture.disabled = true;
+            // AR.js sizes the video and canvas to COVER the screen, so both hang
+            // outside the viewport -- a 4:3 camera on a tall phone is set roughly
+            // 2.9x wider than the screen with a negative margin-left. Capturing the
+            // whole canvas therefore takes in far more of the scene than the user
+            // can see, which is what made the subject look small in the saved photo.
+            // Capture only the slice that is actually on screen.
             const rect = arCanvas.getBoundingClientRect();
             const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-            const width = Math.max(1, Math.round(rect.width * pixelRatio));
-            const height = Math.max(1, Math.round(rect.height * pixelRatio));
+
+            const cropX = Math.max(0, -rect.left);
+            const cropY = Math.max(0, -rect.top);
+            const cropWidth = Math.max(1, Math.min(rect.width - cropX, window.innerWidth));
+            const cropHeight = Math.max(1, Math.min(rect.height - cropY, window.innerHeight));
+
+            const width = Math.max(1, Math.round(cropWidth * pixelRatio));
+            const height = Math.max(1, Math.round(cropHeight * pixelRatio));
             const output = document.createElement("canvas");
             output.width = width;
             output.height = height;
@@ -283,38 +301,45 @@
               return;
             }
 
-            const sourceWidth = video.videoWidth;
-            const sourceHeight = video.videoHeight;
-            const sourceRatio = sourceWidth / sourceHeight;
-            const outputRatio = width / height;
-            let sx = 0;
-            let sy = 0;
-            let sw = sourceWidth;
-            let sh = sourceHeight;
-            if (sourceRatio > outputRatio) {
-              sw = sourceHeight * outputRatio;
-              sx = (sourceWidth - sw) / 2;
-            } else {
-              sh = sourceWidth / outputRatio;
-              sy = (sourceHeight - sh) / 2;
-            }
+            // The video fills the same element box, so the visible slice maps
+            // straight back onto the camera frame's own pixels.
+            context.drawImage(
+              video,
+              (cropX / rect.width) * video.videoWidth,
+              (cropY / rect.height) * video.videoHeight,
+              (cropWidth / rect.width) * video.videoWidth,
+              (cropHeight / rect.height) * video.videoHeight,
+              0, 0, width, height
+            );
 
-            context.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
             const wasVisible = marker.object3D.visible;
             marker.object3D.visible = true;
+            const drawLayer = (layer) => {
+              const scaleX = layer.width / rect.width;
+              const scaleY = layer.height / rect.height;
+              context.drawImage(
+                layer,
+                cropX * scaleX, cropY * scaleY,
+                cropWidth * scaleX, cropHeight * scaleY,
+                0, 0, width, height
+              );
+            };
+
             try {
-              scene.setAttribute("screenshot", { width, height });
+              scene.setAttribute("screenshot", {
+                width: Math.max(1, Math.round(rect.width * pixelRatio)),
+                height: Math.max(1, Math.round(rect.height * pixelRatio))
+              });
               const screenshot = scene.components.screenshot;
               if (screenshot && screenshot.getCanvas) {
-                const arLayer = screenshot.getCanvas("perspective");
-                context.drawImage(arLayer, 0, 0, arLayer.width, arLayer.height, 0, 0, width, height);
+                drawLayer(screenshot.getCanvas("perspective"));
               } else {
                 scene.renderer.render(scene.object3D, scene.camera);
-                context.drawImage(arCanvas, 0, 0, arCanvas.width, arCanvas.height, 0, 0, width, height);
+                drawLayer(arCanvas);
               }
             } catch (error) {
               scene.renderer.render(scene.object3D, scene.camera);
-              context.drawImage(arCanvas, 0, 0, arCanvas.width, arCanvas.height, 0, 0, width, height);
+              drawLayer(arCanvas);
             } finally {
               marker.object3D.visible = wasVisible;
             }
@@ -494,7 +519,7 @@
           id="cat-model-entity"
           position="0 0.018 0"
           scale="4.8 4.8 4.8"
-          rotation="0 0 0"
+          rotation="0 180 0"
         ></a-gltf-model>
         <a-ring
           position="0 0.015 0"
