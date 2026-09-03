@@ -1,0 +1,14 @@
+# Cloudflare Pages project config.
+# Fill in database_id after you create the D1 database (see DEPLOY.md step 3).
+name = "ar-demo"
+compatibility_date = "2025-09-01"
+pages_build_output_dir = "."
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ar-demo-analytics"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+[[r2_buckets]]
+binding = "MODELS"
+bucket_name = "ar-demo-models"

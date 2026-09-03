@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>AR Demo — Admin</title>
+    <style>
+      * { box-sizing: border-box; }
+      :root { --ink:#111; --paper:#f5f2ea; --orange:#ff5a1f; --muted:#6d6962; --line:rgba(17,17,17,.16); }
+      body { margin:0; min-height:100vh; padding:24px; color:var(--ink); background:var(--paper);
+             font:14px/1.55 Arial, Helvetica, sans-serif; }
+      main { width:min(980px,100%); margin:0 auto; }
+      h1 { margin:0 0 4px; font-size:clamp(30px,6vw,44px); letter-spacing:-.04em; }
+      .sub { margin:0 0 26px; color:var(--muted); }
+      section { margin-bottom:26px; padding:18px; border:2px solid var(--ink); border-radius:12px;
+                background:#fff; box-shadow:6px 6px 0 var(--ink); }
+      h2 { margin:0 0 14px; font-size:13px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
+      label { display:block; margin-bottom:6px; font-weight:700; }
+      input[type=password], input[type=text], input[type=file], select {
+        width:100%; margin-bottom:12px; padding:11px; border:2px solid var(--ink);
+        border-radius:7px; background:#fff; font:inherit; }
+      button { min-height:46px; padding:0 18px; border:2px solid var(--ink); border-radius:7px;
+               color:#fff; background:var(--ink); font:inherit; font-weight:900; cursor:pointer; }
+      button.ghost { color:var(--ink); background:transparent; }
+      button:disabled { opacity:.5; cursor:default; }
+      .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+      .msg { margin-top:10px; padding:10px 12px; border-radius:7px; font-weight:700; }
+      .msg.err { color:#8a1c00; background:#ffe6dc; }
+      .msg.ok  { color:#14532d; background:#dcfce7; }
+      .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); }
+      .tile { padding:14px; border:1px solid var(--line); border-radius:9px; background:var(--paper); }
+      .tile b { display:block; font-size:26px; letter-spacing:-.03em; }
+      .tile span { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+      table { width:100%; border-collapse:collapse; }
+      th, td { padding:8px 6px; border-bottom:1px solid var(--line); text-align:left; }
+      th { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.07em; }
+      td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+      .bar { height:8px; border-radius:4px; background:var(--orange); }
+      .hide { display:none; }
+      .live { padding:2px 8px; border-radius:999px; background:var(--orange); color:#fff;
+              font-size:11px; font-weight:900; text-transform:uppercase; }
+      .scroll { overflow-x:auto; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>AR Demo Admin</h1>
+      <p class="sub">Upload models and review usage.</p>
+
+      <section id="login-panel">
+        <h2>Sign in</h2>
+        <label for="password">Admin password</label>
+        <input id="password" type="password" autocomplete="current-password" />
+        <button id="login-button" type="button">Sign in</button>
+        <div id="login-msg"></div>
+      </section>
+
+      <div id="app" class="hide">
+        <section>
+          <h2>Usage <span id="range-label" class="live">30 days</span></h2>
+          <div class="row" style="margin-bottom:14px">
+            <select id="days" style="width:auto;margin:0">
+              <option value="7">Last 7 days</option>
+              <option value="30" selected>Last 30 days</option>
+              <option value="90">Last 90 days</option>
+            </select>
+            <button class="ghost" id="refresh" type="button">Refresh</button>
+            <button class="ghost" id="logout" type="button">Sign out</button>
+          </div>
+          <div class="grid" id="tiles"></div>
+          <div id="funnel" style="margin-top:18px"></div>
+          <div class="scroll"><div id="tables"></div></div>
+        </section>
+
+        <section>
+          <h2>Upload a model</h2>
+          <label for="file">GLB file (max 30 MB)</label>
+          <input id="file" type="file" accept=".glb,model/gltf-binary" />
+          <label for="name">Stored name</label>
+          <input id="name" type="text" placeholder="my-model.glb" />
+          <div class="row">
+            <label style="display:flex;gap:8px;align-items:center;font-weight:400;margin:0">
+              <input id="activate" type="checkbox" style="width:auto;margin:0" checked />
+              Make this the live model
+            </label>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <button id="upload" type="button">Upload</button>
+          </div>
+          <div id="upload-msg"></div>
+        </section>
+
+        <section>
+          <h2>Models in storage</h2>
+          <div class="scroll"><div id="models"></div></div>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const show = (el, text, kind) => { el.innerHTML = text ? `<div class="msg ${kind}">${text}</div>` : ""; };
+      const esc = (v) => String(v).replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      const mb = (bytes) => (bytes / 1048576).toFixed(2) + " MB";
+
+      async function api(path, options) {
+        const response = await fetch(path, { credentials: "same-origin", ...options });
+        let data = null;
+        try { data = await response.json(); } catch (error) { /* non-JSON */ }
+        if (!response.ok) throw new Error((data && data.error) || `Request failed (${response.status})`);
+        return data;
+      }
+
+      $("login-button").addEventListener("click", async () => {
+        const button = $("login-button");
+        button.disabled = true;
+        show($("login-msg"), "", "");
+        try {
+          await api("./api/login", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ password: $("password").value })
+          });
+          $("password").value = "";
+          $("login-panel").classList.add("hide");
+          $("app").classList.remove("hide");
+          await Promise.all([loadStats(), loadModels()]);
+        } catch (error) {
+          show($("login-msg"), esc(error.message), "err");
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      $("password").addEventListener("keydown", (e) => { if (e.key === "Enter") $("login-button").click(); });
+
+      $("logout").addEventListener("click", async () => {
+        try { await api("./api/login", { method: "DELETE" }); } catch (error) { /* ignore */ }
+        location.reload();
+      });
+
+      $("refresh").addEventListener("click", () => { loadStats(); loadModels(); });
+      $("days").addEventListener("change", loadStats);
+
+      $("file").addEventListener("change", () => {
+        const file = $("file").files[0];
+        if (file && !$("name").value) $("name").value = file.name.replace(/\s+/g, "-");
+      });
+
+      async function loadStats() {
+        const days = $("days").value;
+        $("range-label").textContent = days + " days";
+        try {
+          const data = await api(`./api/stats?days=${days}`);
+          const t = data.totals || {};
+          $("tiles").innerHTML = [
+            ["Sessions", data.sessions],
+            ["Marker locks", t.marker_found || 0],
+            ["Models loaded", t.model_loaded || 0],
+            ["Photos taken", t.photo_captured || 0],
+            ["Photos saved", t.photo_saved || 0],
+            ["Model errors", t.model_error || 0]
+          ].map(([label, value]) => `<div class="tile"><b>${value}</b><span>${label}</span></div>`).join("");
+
+          const f = data.funnel || {};
+          const top = Math.max(f.sessions || 0, 1);
+          $("funnel").innerHTML = "<h2>Drop-off</h2>" + [
+            ["Opened the page", f.sessions], ["Camera started", f.camera_started],
+            ["Locked the marker", f.marker_found], ["Took a photo", f.photo_captured]
+          ].map(([label, value]) => `
+            <div style="margin-bottom:8px">
+              <div class="row" style="justify-content:space-between">
+                <span>${label}</span><b>${value || 0}</b>
+              </div>
+              <div class="bar" style="width:${Math.round(((value || 0) / top) * 100)}%"></div>
+            </div>`).join("");
+
+          const table = (title, rows, keyLabel, key, valueKey) => !rows || !rows.length ? "" : `
+            <h2 style="margin-top:20px">${title}</h2>
+            <table><thead><tr><th>${keyLabel}</th><th class="num">Sessions</th></tr></thead><tbody>
+            ${rows.map((r) => `<tr><td>${esc(r[key])}</td><td class="num">${r[valueKey]}</td></tr>`).join("")}
+            </tbody></table>`;
+
+          $("tables").innerHTML =
+            (data.daily && data.daily.length ? `
+              <h2 style="margin-top:20px">By day</h2>
+              <table><thead><tr><th>Day</th><th class="num">Sessions</th><th class="num">Locks</th><th class="num">Photos</th></tr></thead><tbody>
+              ${data.daily.map((r) => `<tr><td>${esc(r.day)}</td><td class="num">${r.sessions}</td><td class="num">${r.marker_found || 0}</td><td class="num">${r.photos || 0}</td></tr>`).join("")}
+              </tbody></table>` : "<p style='color:var(--muted)'>No events recorded yet.</p>") +
+            table("By device", data.devices, "Device", "device", "sessions") +
+            table("By country", data.countries, "Country", "country", "sessions");
+        } catch (error) {
+          $("tiles").innerHTML = `<div class="msg err">${esc(error.message)}</div>`;
+        }
+      }
+
+      async function loadModels() {
+        try {
+          const data = await api("./api/models");
+          if (!data.models.length) {
+            $("models").innerHTML = "<p style='color:var(--muted)'>Nothing uploaded yet. The bundled model is being served.</p>";
+            return;
+          }
+          $("models").innerHTML = `
+            <table><thead><tr><th>Name</th><th class="num">Size</th><th>Uploaded</th><th></th></tr></thead><tbody>
+            ${data.models.map((m) => `
+              <tr>
+                <td>${esc(m.name)} ${m.name === data.active ? '<span class="live">live</span>' : ""}</td>
+                <td class="num">${mb(m.size)}</td>
+                <td>${esc(new Date(m.uploaded).toLocaleDateString())}</td>
+                <td class="num">
+                  ${m.name === data.active ? "" :
+                    `<button class="ghost" data-activate="${esc(m.name)}">Make live</button>
+                     <button class="ghost" data-delete="${esc(m.name)}">Delete</button>`}
+                </td>
+              </tr>`).join("")}
+            </tbody></table>`;
+        } catch (error) {
+          $("models").innerHTML = `<div class="msg err">${esc(error.message)}</div>`;
+        }
+      }
+
+      $("models").addEventListener("click", async (event) => {
+        const activate = event.target.getAttribute("data-activate");
+        const remove = event.target.getAttribute("data-delete");
+        try {
+          if (activate) {
+            await api("./api/models", {
+              method: "PUT", headers: { "content-type": "application/json" },
+              body: JSON.stringify({ name: activate })
+            });
+          } else if (remove) {
+            if (!confirm(`Delete ${remove}? This cannot be undone.`)) return;
+            await api(`./api/models?name=${encodeURIComponent(remove)}`, { method: "DELETE" });
+          } else {
+            return;
+          }
+          await loadModels();
+        } catch (error) {
+          alert(error.message);
+        }
+      });
+
+      $("upload").addEventListener("click", async () => {
+        const file = $("file").files[0];
+        if (!file) return show($("upload-msg"), "Choose a .glb file first.", "err");
+        const button = $("upload");
+        button.disabled = true;
+        show($("upload-msg"), "Uploading…", "ok");
+        try {
+          const form = new FormData();
+          form.append("file", file);
+          form.append("name", $("name").value || file.name);
+          form.append("activate", $("activate").checked ? "true" : "false");
+          const result = await api("./api/models", { method: "POST", body: form });
+          show($("upload-msg"), `Uploaded ${esc(result.name)} (${mb(result.size)}).`, "ok");
+          $("file").value = "";
+          $("name").value = "";
+          await loadModels();
+        } catch (error) {
+          show($("upload-msg"), esc(error.message), "err");
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      // An existing session cookie means we can skip the login panel.
+      (async () => {
+        try {
+          await api("./api/stats?days=1");
+          $("login-panel").classList.add("hide");
+          $("app").classList.remove("hide");
+          loadStats();
+          loadModels();
+        } catch (error) { /* stay on the login panel */ }
+      })();
+    </script>
+  </body>
+</html>

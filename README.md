@@ -23,3 +23,40 @@ The final address normally follows:
 
 Keep all filenames unchanged. The camera experience loads `ar-target.patt` using a relative path so it works from a GitHub project repository.
 The optimised `lucky-lantern-cat-mobile.glb` model must remain beside `ar.html`.
+
+A-Frame and AR.js are vendored as `vendor-aframe-1.6.0.js` and
+`vendor-aframe-ar-3.4.7.js`, so the demo has no third-party runtime dependency and
+cannot break because a CDN is slow or down. Both files must be uploaded alongside
+`ar.html`.
+
+## If the model flickers or drifts
+
+Tracking quality is roughly half code, half physical setup.
+
+- **Print on matte paper.** Glossy stock reflects room lights into the camera and
+  wipes out the black border, which reads as a lost marker.
+- **Print at 100% scale, no "fit to page".** The border-to-pattern ratio must stay
+  at 0.5 or the pattern will not match.
+- **Lay it flat.** A curled or tilted sheet bends the square and the pose solver
+  fights it. Tape the corners down.
+- **Even, indirect light.** Avoid a single hard lamp or direct sun; a bright hotspot
+  across one half of the marker is the most common cause of drop-outs.
+- **Keep the whole black square in frame,** including the border. Cropping any edge
+  loses the marker instantly.
+- **Stay within about 20–70 cm.** Further out and the inner pattern is too few pixels
+  to identify; closer and the border leaves the frame.
+
+## Backend and hosting
+
+The site now ships a Cloudflare backend: admin model uploads, R2 storage and
+privacy-preserving usage analytics. See `DEPLOY.md` for the deployment steps.
+
+GitHub Pages can still serve the AR experience on its own — the page falls back
+to the bundled model when the API is absent — but uploads and analytics require
+Cloudflare.
+
+To shrink a Meshy export before uploading:
+
+```bash
+python3 tools/optimize-glb.py meshy-export.glb ready-for-ar.glb --max-mb 3
+```
